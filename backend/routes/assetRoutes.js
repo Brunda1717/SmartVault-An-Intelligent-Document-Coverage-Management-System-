@@ -141,4 +141,29 @@ router.get("/dashboard", authMiddleware, async (req, res) => {
     }
 });
 
+// Get one asset by ID
+router.get("/:id", authMiddleware, async (req, res) => {
+    try {
+        const [assets] = await db.query(
+            "SELECT * FROM assets WHERE asset_id = ? AND user_id = ?",
+            [req.params.id, req.user.user_id]
+        );
+
+        if (assets.length === 0) {
+            return res.status(404).json({
+                message: "Asset not found"
+            });
+        }
+
+        res.json(assets[0]);
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            message: "Failed to load asset"
+        });
+    }
+});
+
 module.exports = router;
