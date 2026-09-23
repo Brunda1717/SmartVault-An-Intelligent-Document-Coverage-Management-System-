@@ -13,6 +13,18 @@ function findOverlaps(coverageList) {
             const secondStart = new Date(second.start_date);
             const secondEnd = new Date(second.end_date);
 
+            // Defensive check: skip any record whose own dates are invalid
+            // (start after end) instead of silently producing a nonsensical
+            // negative overlap window later. This can happen if bad data
+            // gets inserted outside the API (e.g. directly in MySQL Workbench).
+            if (firstStart > firstEnd || secondStart > secondEnd) {
+                console.warn(
+                    `Skipping overlap check: coverage ${first.coverage_id} or ` +
+                    `${second.coverage_id} has start_date after end_date.`
+                );
+                continue;
+            }
+
             if (
                 firstStart <= secondEnd &&
                 secondStart <= firstEnd

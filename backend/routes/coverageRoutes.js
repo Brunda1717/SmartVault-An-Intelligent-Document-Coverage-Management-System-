@@ -248,5 +248,64 @@ router.get(
         }
     }
 );
+// Add this near the bottom of coverageRoutes.js, before module.exports.
+// Aggregates every asset the user owns into Critical / Attention / Safe
+// buckets — this is what the main dashboard screen calls.
+router.get("/dashboard/summary", authMiddleware, async (req, res) => {
+    try {
+        const [assets] = await db.query(
+            `SELECT asset_id, asset_name, purchase_value
+             FROM assets
+             WHERE user_id = ?`,
+            [req.user.user_id]
+        );
+
+        const buckets = { Critical: [], Attention: [], Safe: [], Lapsed: [] };
+        let totalOverlaps = 0;
+
+        for (const asset of assets) {
+            const [coverage] = await db.query(
+                `SELECT * FROM coverage WHERE asset_id = ?`,
+                [asset.asset_id]
+            );
+            if (coverage.length === 0) continue;
+
+            const overlaps = findOverlaps(coverage);
+            totalOverlaps += overlaps.length;
+
+            // Represent this asset on the dashboard by its single most
+            // urgent coverage record, not all of them individually.
+            let worst = null;
+            for (const c of coverage) {
+                const hasOverlap = overlaps.some(
+                    (o) => o.coverage_1 === c.coverage_id || o.coverage_2 === c.coverage_id
+                );
+                const result = calculatePriority(
+                    { purchase_value: Number(asset.purchase_value) },
+                    c,
+                    hasOverlap
+                );
+                if (!worst || result.score > worst.result.score) {
+                    worst = { coverage: c, result };
+                }
+            }
+
+            buckets[worst.result.priority].push({
+                asset_id: asset.asset_id,
+                asset_name: asset.asset_name,
+                coverage_type: worst.coverage.coverage_type,
+                end_date: worst.coverage.end_date,
+                days_remaining: worst.result.days_remaining,
+                reasons: worst.result.reasons,
+            });
+        }
+
+        res.json({ buckets, total_overlaps: totalOverlaps });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to load dashboard summary" });
+    }
+});
 
 module.exports = router;
