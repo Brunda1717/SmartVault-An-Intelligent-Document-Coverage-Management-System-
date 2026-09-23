@@ -1,11 +1,13 @@
 function calculatePriority(asset, coverage, hasOverlap) {
-    const today = new Date();
+  const today = new Date();
+today.setHours(0, 0, 0, 0);
 
-    const endDate = new Date(coverage.end_date);
+const endDate = new Date(coverage.end_date);
+endDate.setHours(0, 0, 0, 0);
 
-    const daysRemaining = Math.ceil(
-        (endDate - today) / (1000 * 60 * 60 * 24)
-    );
+const daysRemaining = Math.round(
+    (endDate - today) / (1000 * 60 * 60 * 24)
+);
 
     let urgencyScore;
 

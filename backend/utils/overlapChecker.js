@@ -7,11 +7,17 @@ function findOverlaps(coverageList) {
             const first = coverageList[i];
             const second = coverageList[j];
 
-            const firstStart = new Date(first.start_date);
-            const firstEnd = new Date(first.end_date);
+           const firstStart = new Date(first.start_date);
+           firstStart.setHours(0, 0, 0, 0);
 
-            const secondStart = new Date(second.start_date);
-            const secondEnd = new Date(second.end_date);
+           const firstEnd = new Date(first.end_date);
+           firstEnd.setHours(0, 0, 0, 0);
+
+           const secondStart = new Date(second.start_date);
+           secondStart.setHours(0, 0, 0, 0);
+
+          const secondEnd = new Date(second.end_date);
+          secondEnd.setHours(0, 0, 0, 0);
 
             // Defensive check: skip any record whose own dates are invalid
             // (start after end) instead of silently producing a nonsensical
