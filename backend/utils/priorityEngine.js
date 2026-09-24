@@ -8,7 +8,7 @@ function calculatePriority(asset, coverage, hasOverlap) {
     );
 
     // -----------------------------
-    // 1. Expiry urgency
+    // 1. Coverage urgency
     // -----------------------------
 
     let urgencyScore;
@@ -60,19 +60,20 @@ function calculatePriority(asset, coverage, hasOverlap) {
         : "No potential coverage overlap detected";
 
     // -----------------------------
-    // 4. Explain expiry urgency
+    // 4. Explain coverage urgency
+    //    (wording fixed: "expired"/"expires" -> "lapsed"/"ends")
     // -----------------------------
 
     let urgencyReason;
 
     if (daysRemaining < 0) {
-        urgencyReason = "Coverage has already expired";
+        urgencyReason = "Coverage has already lapsed";
     } else if (daysRemaining <= 7) {
-        urgencyReason = `Coverage expires in ${daysRemaining} days`;
+        urgencyReason = `Coverage ends in ${daysRemaining} days`;
     } else if (daysRemaining <= 30) {
-        urgencyReason = `Coverage expires in ${daysRemaining} days`;
+        urgencyReason = `Coverage ends in ${daysRemaining} days`;
     } else if (daysRemaining <= 90) {
-        urgencyReason = `Coverage expires in ${daysRemaining} days`;
+        urgencyReason = `Coverage ends in ${daysRemaining} days`;
     } else {
         urgencyReason = `Coverage has ${daysRemaining} days remaining`;
     }
@@ -88,12 +89,21 @@ function calculatePriority(asset, coverage, hasOverlap) {
 
     // -----------------------------
     // 6. Determine priority
+    //    Two hard overrides beat the score, in this order:
+    //      - Lapsed coverage is always "Lapsed"
+    //      - Anything ending within 7 days is always "Critical",
+    //        even if a low asset value would otherwise pull the
+    //        score down into "Attention". Urgency should not get
+    //        diluted by value.
+    //    Otherwise, the total score decides the bucket.
     // -----------------------------
 
     let priority;
 
     if (priorityStatus === "Lapsed") {
         priority = "Lapsed";
+    } else if (daysRemaining <= 7) {
+        priority = "Critical";
     } else if (totalScore >= 70) {
         priority = "Critical";
     } else if (totalScore >= 40) {
