@@ -157,7 +157,7 @@ function Dashboard() {
                     <p>
                         Monitor your assets, coverage periods,
                         potential overlaps and upcoming
-                        expirations from one place.
+                        coverage end dates from one place.
                     </p>
 
                 </div>
@@ -620,7 +620,7 @@ function Dashboard() {
 
                                             <strong>
                                                 {item.days_remaining < 0
-                                                    ? "Expired"
+                                                    ? "Lapsed"
                                                     : item.days_remaining}
                                             </strong>
 
