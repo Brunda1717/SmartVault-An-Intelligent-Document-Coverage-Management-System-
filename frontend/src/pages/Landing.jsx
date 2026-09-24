@@ -136,7 +136,7 @@ function Landing() {
                         <p className="hero-description">
                             SmartVault helps you organize important documents,
                             manage multiple coverage records, identify
-                            potential overlaps, and stay ahead of expiry dates.
+                            potential overlaps, and stay ahead of coverage deadlines.
                         </p>
 
                         <div className="hero-buttons">
