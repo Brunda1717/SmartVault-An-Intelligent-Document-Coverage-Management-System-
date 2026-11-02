@@ -291,26 +291,77 @@ function AssetDetails() {
         return `${mb.toFixed(2)} MB`;
     };
 
-    const getDocumentUrl = (document) => {
-        if (!document.file_path) {
-            return "#";
+    // Open a protected document using the authenticated backend route.
+    // The document list intentionally does not expose its server file path.
+    const handleViewDocument = async (document) => {
+        const token = localStorage.getItem("token");
+        const newTab = window.open("about:blank", "_blank");
+
+        if (!newTab) {
+            alert("Please allow pop-ups to view this document.");
+            return;
         }
 
-        if (
-            document.file_path.startsWith(
-                "http://"
-            ) ||
-            document.file_path.startsWith(
-                "https://"
-            )
-        ) {
-            return document.file_path;
-        }
+        try {
+            const response = await fetch(
+                `http://localhost:5000/api/documents/${document.document_id}/view`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
 
-        return `http://localhost:5000/${document.file_path.replace(
-            /^\/+/,
-            ""
-        )}`;
+            if (!response.ok) {
+                const result = await response.json().catch(() => ({}));
+                newTab.close();
+                alert(result.message || "Failed to open document.");
+                return;
+            }
+
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            newTab.location.href = objectUrl;
+        } catch (err) {
+            console.error("Document view error:", err);
+            newTab.close();
+            alert("Unable to open document. Please check that the SmartVault server is running.");
+        }
+    };
+
+    // Download documents through the same authenticated endpoint.
+    const handleDownloadDocument = async (document) => {
+        const token = localStorage.getItem("token");
+
+        try {
+            const response = await fetch(
+                `http://localhost:5000/api/documents/${document.document_id}/view`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            if (!response.ok) {
+                const result = await response.json().catch(() => ({}));
+                alert(result.message || "Failed to download document.");
+                return;
+            }
+
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const link = window.document.createElement("a");
+            link.href = objectUrl;
+            link.download = document.file_name || "document";
+            window.document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        } catch (err) {
+            console.error("Document download error:", err);
+            alert("Unable to download document. Please check that the SmartVault server is running.");
+        }
     };
 
     return (
@@ -960,11 +1011,6 @@ function AssetDetails() {
                                                             document
                                                         ) => {
 
-                                                            const documentUrl =
-                                                                getDocumentUrl(
-                                                                    document
-                                                                );
-
                                                             return (
 
                                                                 <div
@@ -1005,28 +1051,21 @@ function AssetDetails() {
 
                                                                     <div className="linked-document-actions">
 
-                                                                        <a
-                                                                            href={
-                                                                                documentUrl
-                                                                            }
-                                                                            target="_blank"
-                                                                            rel="noreferrer"
-                                                                            className="document-view-button"
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleViewDocument(document)}
+                                                                            className="document-view-button" style={{ cursor: "pointer", font: "inherit" }}
                                                                         >
                                                                             View
-                                                                        </a>
+                                                                        </button>
 
-                                                                        <a
-                                                                            href={
-                                                                                documentUrl
-                                                                            }
-                                                                            download={
-                                                                                document.file_name
-                                                                            }
-                                                                            className="document-download-button"
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleDownloadDocument(document)}
+                                                                            className="document-download-button" style={{ cursor: "pointer", font: "inherit" }}
                                                                         >
                                                                             Download
-                                                                        </a>
+                                                                        </button>
 
                                                                     </div>
 
@@ -1132,11 +1171,6 @@ function AssetDetails() {
                             {documents.map(
                                 (document) => {
 
-                                    const documentUrl =
-                                        getDocumentUrl(
-                                            document
-                                        );
-
                                     return (
 
                                         <div
@@ -1192,28 +1226,21 @@ function AssetDetails() {
 
                                             <div className="document-actions">
 
-                                                <a
-                                                    href={
-                                                        documentUrl
-                                                    }
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="document-view-button"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleViewDocument(document)}
+                                                    className="document-view-button" style={{ cursor: "pointer", font: "inherit" }}
                                                 >
                                                     View
-                                                </a>
+                                                </button>
 
-                                                <a
-                                                    href={
-                                                        documentUrl
-                                                    }
-                                                    download={
-                                                        document.file_name
-                                                    }
-                                                    className="document-download-button"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleDownloadDocument(document)}
+                                                    className="document-download-button" style={{ cursor: "pointer", font: "inherit" }}
                                                 >
                                                     Download
-                                                </a>
+                                                </button>
 
                                             </div>
 
