@@ -9,6 +9,22 @@ function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
 
+    const handleDeleteAsset = async (e, asset) => {
+        e.stopPropagation();   // stops the card's click from opening the asset page
+        if (!window.confirm(`Delete "${asset.asset_name}"?\n\nAll its coverage and documents will be permanently removed.`)) return;
+        try {
+            const res = await fetch(`http://localhost:5000/api/assets/${asset.asset_id}`, {
+                method: "DELETE",
+                headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+            });
+            if (res.ok) { window.location.reload(); return; }
+            const r = await res.json().catch(() => ({}));
+            alert(r.message || "Delete failed.");
+        } catch {
+            alert("Unable to connect to server.");
+        }
+    };
+
     useEffect(() => {
         const fetchDashboard = async () => {
             const token = localStorage.getItem("token");
@@ -20,8 +36,8 @@ function Dashboard() {
                             "http://localhost:5000/api/coverage/dashboard/summary",
                             {
                                 headers: {
-                                    Authorization: `Bearer ${token}`
-                                }
+                                    Authorization: `Bearer ${token}`,
+                                },
                             }
                         ),
 
@@ -29,17 +45,14 @@ function Dashboard() {
                             "http://localhost:5000/api/assets",
                             {
                                 headers: {
-                                    Authorization: `Bearer ${token}`
-                                }
+                                    Authorization: `Bearer ${token}`,
+                                },
                             }
-                        )
+                        ),
                     ]);
 
-                const summaryData =
-                    await summaryResponse.json();
-
-                const assetsData =
-                    await assetsResponse.json();
+                const summaryData = await summaryResponse.json();
+                const assetsData = await assetsResponse.json();
 
                 if (!summaryResponse.ok) {
                     setError(
@@ -96,9 +109,7 @@ function Dashboard() {
                 <p>{error}</p>
 
                 <button
-                    onClick={() =>
-                        window.location.reload()
-                    }
+                    onClick={() => window.location.reload()}
                 >
                     Try Again
                 </button>
@@ -106,39 +117,52 @@ function Dashboard() {
         );
     }
 
-    const critical =
-        summary?.buckets?.Critical || [];
+    // Backend returns numeric counts in summary.
+    const counts = summary?.summary || {};
 
-    const attention =
-        summary?.buckets?.Attention || [];
+    // Backend returns coverage records in buckets.
+    const buckets = summary?.buckets || {};
 
-    const safe =
-        summary?.buckets?.Safe || [];
+    const critical = buckets.Critical || [];
+    const attention = buckets.Attention || [];
+    const safe = buckets.Safe || [];
+    const lapsed = buckets.Lapsed || [];
 
-    const lapsed =
-        summary?.buckets?.Lapsed || [];
+    const criticalCount = counts.Critical || 0;
+    const attentionCount = counts.Attention || 0;
+    const safeCount = counts.Safe || 0;
+    const lapsedCount = counts.Lapsed || 0;
 
     const totalAssets = assets.length;
 
     const totalTracked =
-        critical.length +
-        attention.length +
-        safe.length +
-        lapsed.length;
+        criticalCount +
+        attentionCount +
+        safeCount +
+        lapsedCount;
 
     const healthyPercentage =
         totalTracked > 0
             ? Math.round(
-                  ((safe.length) / totalTracked) * 100
-              )
+                (safeCount / totalTracked) * 100
+            )
             : 0;
+
+    const totalOverlaps =
+        summary?.total_overlaps || 0;
+
+    const overlapList = summary?.overlaps || [];
+    const fmtDate = (d) =>
+        d
+            ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", {
+                  day: "numeric", month: "short", year: "numeric",
+              })
+            : "—";
 
     return (
         <div className="dashboard-page">
 
-            {/* =========================================
-                HEADER
-            ========================================= */}
+            {/* HEADER */}
 
             <section className="dashboard-hero">
 
@@ -187,9 +211,7 @@ function Dashboard() {
             </section>
 
 
-            {/* =========================================
-                STATS
-            ========================================= */}
+            {/* STATS */}
 
             <section className="dashboard-stats">
 
@@ -235,7 +257,7 @@ function Dashboard() {
                     </div>
 
                     <div className="stat-number">
-                        {critical.length}
+                        {criticalCount}
                     </div>
 
                     <p>
@@ -262,7 +284,7 @@ function Dashboard() {
                     </div>
 
                     <div className="stat-number">
-                        {attention.length}
+                        {attentionCount}
                     </div>
 
                     <p>
@@ -289,7 +311,7 @@ function Dashboard() {
                     </div>
 
                     <div className="stat-number">
-                        {safe.length}
+                        {safeCount}
                     </div>
 
                     <p>
@@ -303,9 +325,7 @@ function Dashboard() {
             </section>
 
 
-            {/* =========================================
-                HEALTH + OVERLAP
-            ========================================= */}
+            {/* COVERAGE HEALTH + OVERLAPS */}
 
             <section className="dashboard-insight-grid">
 
@@ -314,6 +334,7 @@ function Dashboard() {
                     <div className="section-title-row">
 
                         <div>
+
                             <span className="section-kicker">
                                 COVERAGE HEALTH
                             </span>
@@ -321,6 +342,7 @@ function Dashboard() {
                             <h2>
                                 Your vault at a glance
                             </h2>
+
                         </div>
 
                         <div className="health-circle">
@@ -341,25 +363,25 @@ function Dashboard() {
                         <div className="health-row">
 
                             <div>
-                                <span>
-                                    Safe
-                                </span>
+                                <span>Safe</span>
 
                                 <strong>
-                                    {safe.length}
+                                    {safeCount}
                                 </strong>
                             </div>
 
                             <div className="health-track">
+
                                 <span
                                     className="health-fill safe-fill"
                                     style={{
                                         width:
                                             totalTracked > 0
-                                                ? `${(safe.length / totalTracked) * 100}%`
-                                                : "0%"
+                                                ? `${(safeCount / totalTracked) * 100}%`
+                                                : "0%",
                                     }}
                                 />
+
                             </div>
 
                         </div>
@@ -368,25 +390,25 @@ function Dashboard() {
                         <div className="health-row">
 
                             <div>
-                                <span>
-                                    Attention
-                                </span>
+                                <span>Attention</span>
 
                                 <strong>
-                                    {attention.length}
+                                    {attentionCount}
                                 </strong>
                             </div>
 
                             <div className="health-track">
+
                                 <span
                                     className="health-fill attention-fill"
                                     style={{
                                         width:
                                             totalTracked > 0
-                                                ? `${(attention.length / totalTracked) * 100}%`
-                                                : "0%"
+                                                ? `${(attentionCount / totalTracked) * 100}%`
+                                                : "0%",
                                     }}
                                 />
+
                             </div>
 
                         </div>
@@ -395,25 +417,25 @@ function Dashboard() {
                         <div className="health-row">
 
                             <div>
-                                <span>
-                                    Critical
-                                </span>
+                                <span>Critical</span>
 
                                 <strong>
-                                    {critical.length}
+                                    {criticalCount}
                                 </strong>
                             </div>
 
                             <div className="health-track">
+
                                 <span
                                     className="health-fill critical-fill"
                                     style={{
                                         width:
                                             totalTracked > 0
-                                                ? `${(critical.length / totalTracked) * 100}%`
-                                                : "0%"
+                                                ? `${(criticalCount / totalTracked) * 100}%`
+                                                : "0%",
                                     }}
                                 />
+
                             </div>
 
                         </div>
@@ -422,25 +444,25 @@ function Dashboard() {
                         <div className="health-row">
 
                             <div>
-                                <span>
-                                    Lapsed
-                                </span>
+                                <span>Lapsed</span>
 
                                 <strong>
-                                    {lapsed.length}
+                                    {lapsedCount}
                                 </strong>
                             </div>
 
                             <div className="health-track">
+
                                 <span
                                     className="health-fill lapsed-fill"
                                     style={{
                                         width:
                                             totalTracked > 0
-                                                ? `${(lapsed.length / totalTracked) * 100}%`
-                                                : "0%"
+                                                ? `${(lapsedCount / totalTracked) * 100}%`
+                                                : "0%",
                                     }}
                                 />
+
                             </div>
 
                         </div>
@@ -453,11 +475,15 @@ function Dashboard() {
                 <div className="dashboard-overlap-card">
 
                     <div className="overlap-visual">
+
                         <div className="overlap-ring">
+
                             <span>
-                                {summary.total_overlaps}
+                                {totalOverlaps}
                             </span>
+
                         </div>
+
                     </div>
 
                     <div>
@@ -473,10 +499,10 @@ function Dashboard() {
                         <p>
                             SmartVault found{" "}
                             <strong>
-                                {summary.total_overlaps}
+                                {totalOverlaps}
                             </strong>{" "}
                             potential coverage overlap
-                            {summary.total_overlaps === 1
+                            {totalOverlaps === 1
                                 ? ""
                                 : "s"}.
                         </p>
@@ -487,7 +513,7 @@ function Dashboard() {
                             terms before making a decision.
                         </small>
 
-                        {summary.total_overlaps > 0 && (
+                        {totalOverlaps > 0 && (
                             <div className="overlap-status">
                                 <span />
                                 Review recommended
@@ -501,9 +527,61 @@ function Dashboard() {
             </section>
 
 
-            {/* =========================================
-                ATTENTION
-            ========================================= */}
+            {/* OVERLAP REPORT */}
+            <section className="dashboard-section">
+                <div className="section-heading">
+                    <div>
+                        <span className="section-kicker">OVERLAP REPORT</span>
+                        <h2>Where your coverage overlaps</h2>
+                    </div>
+                    <span className="section-count">
+                        {overlapList.length} overlap{overlapList.length === 1 ? "" : "s"}
+                    </span>
+                </div>
+                {overlapList.length === 0 ? (
+                    <div className="empty-success">
+                        <div className="success-check">✓</div>
+                        <div>
+                            <h3>No overlapping coverage</h3>
+                            <p>None of your coverage periods run on the same days.</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div style={{ display: "grid", gap: 12 }}>
+                        {overlapList.map((o, i) => (
+                            <div
+                                key={`${o.asset_id}-${o.coverage_1}-${o.coverage_2}-${i}`}
+                                style={{
+                                    display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16,
+                                    padding: 16, borderRadius: 14,
+                                    border: "1px solid rgba(245,158,11,.45)",
+                                    background: "rgba(245,158,11,.08)",
+                                }}
+                            >
+                                <div style={{ flex: "1 1 280px" }}>
+                                    <strong>{o.asset_name}</strong>
+                                    <p style={{ margin: "4px 0" }}>
+                                        {o.coverage_1_type} ↔ {o.coverage_2_type}
+                                    </p>
+                                    <small>
+                                        Both active {fmtDate(o.overlap_start)} – {fmtDate(o.overlap_end)}
+                                        {" • "}{o.overlap_days} days
+                                    </small>
+                                </div>
+                                <button
+                                    style={{ cursor: "pointer", font: "inherit", padding: "8px 14px", borderRadius: 8 }}
+                                    onClick={() => navigate(`/asset/${o.asset_id}`)}
+                                >
+                                    Review &amp; fix →
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </section>
+
+
+            {/* PRIORITY CENTER */}
 
             <section className="dashboard-section">
 
@@ -522,18 +600,26 @@ function Dashboard() {
                     </div>
 
                     <span className="section-count">
-                        {attention.length} item
-                        {attention.length === 1
+
+                        {critical.length +
+                            attention.length +
+                            lapsed.length}{" "}
+
+                        item
+                        {critical.length +
+                            attention.length +
+                            lapsed.length === 1
                             ? ""
                             : "s"}
+
                     </span>
 
                 </div>
 
 
                 {attention.length === 0 &&
-                critical.length === 0 &&
-                lapsed.length === 0 ? (
+                    critical.length === 0 &&
+                    lapsed.length === 0 ? (
 
                     <div className="empty-success">
 
@@ -542,6 +628,7 @@ function Dashboard() {
                         </div>
 
                         <div>
+
                             <h3>
                                 Everything looks good
                             </h3>
@@ -550,6 +637,7 @@ function Dashboard() {
                                 No coverage currently requires
                                 your attention.
                             </p>
+
                         </div>
 
                     </div>
@@ -562,31 +650,15 @@ function Dashboard() {
                             .slice(0, 5)
                             .map((item, index) => {
 
-                                const isLapsed =
-                                    lapsed.some(
-                                        (x) =>
-                                            x.asset_id ===
-                                            item.asset_id
-                                    );
-
-                                const isCritical =
-                                    critical.some(
-                                        (x) =>
-                                            x.asset_id ===
-                                            item.asset_id
-                                    );
-
                                 const status =
-                                    isLapsed
+                                    item.days_remaining < 0
                                         ? "Lapsed"
-                                        : isCritical
-                                        ? "Critical"
-                                        : "Attention";
+                                        : item.priority;
 
                                 return (
                                     <div
                                         className={`priority-item ${status.toLowerCase()}`}
-                                        key={`${item.asset_id}-${index}`}
+                                        key={`${item.coverage_id}-${index}`}
                                     >
 
                                         <div className="priority-status">
@@ -601,7 +673,9 @@ function Dashboard() {
                                                     {item.asset_name}
                                                 </h3>
 
-                                                <span className={`priority-badge ${status.toLowerCase()}`}>
+                                                <span
+                                                    className={`priority-badge ${status.toLowerCase()}`}
+                                                >
                                                     {status}
                                                 </span>
 
@@ -653,9 +727,7 @@ function Dashboard() {
             </section>
 
 
-            {/* =========================================
-                ASSETS
-            ========================================= */}
+            {/* ASSETS */}
 
             <section className="dashboard-section">
 
@@ -723,7 +795,7 @@ function Dashboard() {
                                 key={asset.asset_id}
                                 style={{
                                     animationDelay:
-                                        `${index * 0.08}s`
+                                        `${index * 0.08}s`,
                                 }}
                                 onClick={() =>
                                     navigate(
@@ -735,9 +807,11 @@ function Dashboard() {
                                 <div className="asset-card-top">
 
                                     <div className="asset-symbol">
+
                                         {asset.asset_name
                                             ?.charAt(0)
                                             ?.toUpperCase() || "A"}
+
                                     </div>
 
                                     <span>
@@ -752,6 +826,7 @@ function Dashboard() {
 
                                 <p>
                                     {asset.brand || "Asset"}
+
                                     {asset.model
                                         ? ` • ${asset.model}`
                                         : ""}
@@ -760,8 +835,7 @@ function Dashboard() {
                                 <div className="asset-card-footer">
 
                                     <span>
-                                        {asset.category ||
-                                            "General"}
+                                        {asset.category || "General"}
                                     </span>
 
                                     <span>
@@ -771,6 +845,19 @@ function Dashboard() {
                                         ).toLocaleString("en-IN")}
                                     </span>
 
+                                </div>
+
+                                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                                    <button
+                                        style={{ cursor: "pointer", font: "inherit", padding: "6px 12px", borderRadius: 8 }}
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/edit-asset/${asset.asset_id}`); }}>
+                                        ✎ Edit
+                                    </button>
+                                    <button
+                                        style={{ cursor: "pointer", font: "inherit", padding: "6px 12px", borderRadius: 8, background: "#dc2626", color: "#fff", border: "none" }}
+                                        onClick={(e) => handleDeleteAsset(e, asset)}>
+                                        Delete
+                                    </button>
                                 </div>
 
                             </div>
@@ -784,9 +871,7 @@ function Dashboard() {
             </section>
 
 
-            {/* =========================================
-                BOTTOM SYSTEM STRIP
-            ========================================= */}
+            {/* SYSTEM STATUS */}
 
             <section className="dashboard-system-strip">
 

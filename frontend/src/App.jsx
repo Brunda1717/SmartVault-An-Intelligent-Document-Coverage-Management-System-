@@ -18,6 +18,8 @@ function App() {
                 <Route path="/add-asset" element={<AddAsset />} />
                 <Route path="/asset/:id" element={<AssetDetails />} />
                 <Route path="/asset/:id/add-coverage" element={<AddCoverage />} />
+                <Route path="/edit-asset/:id" element={<AddAsset />} />
+                <Route path="/asset/:id/edit-coverage/:coverageId" element={<AddCoverage />} />
             </Routes>
         </BrowserRouter>
     );

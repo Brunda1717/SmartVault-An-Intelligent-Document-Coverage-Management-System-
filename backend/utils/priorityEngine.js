@@ -1,191 +1,158 @@
-function calculatePriority(asset, coverage, hasOverlap) {
+function getCalendarDate(value) {
+    if (!value) return null;
 
-    // -----------------------------
-    // 0. Calculate days remaining
-    //    using calendar dates
-    // -----------------------------
+    // MySQL DATE values normally arrive as YYYY-MM-DD.
+    // Parse date-only values as UTC to avoid timezone shifts.
+    const dateString =
+        value instanceof Date
+            ? value.toISOString().slice(0, 10)
+            : String(value).slice(0, 10);
 
-    // Get today's local calendar date
-    const today = new Date();
-
-    const todayDate =
-        `${today.getFullYear()}-${String(
-            today.getMonth() + 1
-        ).padStart(2, "0")}-${String(
-            today.getDate()
-        ).padStart(2, "0")}`;
-
-    // Convert YYYY-MM-DD into UTC midnight
-    // This avoids timezone and time-of-day issues
-    const todayUTC = new Date(
-        `${todayDate}T00:00:00Z`
-    );
-
-    const endDateUTC = new Date(
-        `${coverage.end_date}T00:00:00Z`
-    );
-
-    // Difference in whole calendar days
-    const daysRemaining = Math.round(
-        (endDateUTC - todayUTC) /
-            (1000 * 60 * 60 * 24)
-    );
-    // -----------------------------
-    // 1. Coverage urgency
-    // -----------------------------
-
-    let urgencyScore;
-    let priorityStatus;
-
-    if (daysRemaining < 0) {
-
-        urgencyScore = 50;
-        priorityStatus = "Lapsed";
-
-    } else if (daysRemaining <= 7) {
-
-        urgencyScore = 50;
-        priorityStatus = "Critical";
-
-    } else if (daysRemaining <= 30) {
-
-        urgencyScore = 30;
-        priorityStatus = "Attention";
-
-    } else if (daysRemaining <= 90) {
-
-        urgencyScore = 15;
-        priorityStatus = "Attention";
-
-    } else {
-
-        urgencyScore = 5;
-        priorityStatus = "Safe";
-
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        return null;
     }
 
-    // -----------------------------
-    // 2. Asset value
-    // -----------------------------
+    const [year, month, day] = dateString.split("-").map(Number);
+
+    const date = new Date(Date.UTC(year, month - 1, day));
+
+    // Reject impossible calendar dates.
+    if (
+        date.getUTCFullYear() !== year ||
+        date.getUTCMonth() !== month - 1 ||
+        date.getUTCDate() !== day
+    ) {
+        return null;
+    }
+
+    return date;
+}
+
+function calculatePriority(asset, coverage, hasOverlap = false) {
+    const today = new Date();
+
+    // Use today's local calendar date, then compare UTC calendar dates.
+    const todayUTC = new Date(
+        Date.UTC(
+            today.getFullYear(),
+            today.getMonth(),
+            today.getDate()
+        )
+    );
+
+    const endDateUTC = getCalendarDate(coverage?.end_date);
+
+    if (!endDateUTC) {
+        return {
+            score: 0,
+            priority: "Unknown",
+            days_remaining: null,
+            explanation: {
+                urgency_score: 0,
+                urgency_reason: "Coverage end date is missing or invalid",
+                value_score: 0,
+                value_reason: "Asset value could not be evaluated",
+                coverage_score: 0,
+                coverage_reason: "Coverage situation could not be evaluated",
+            },
+        };
+    }
+
+    // Difference in whole calendar days.
+    const daysRemaining = Math.round(
+        (endDateUTC.getTime() - todayUTC.getTime()) /
+            (1000 * 60 * 60 * 24)
+    );
+
+    // ==========================================
+    // 1. EXPIRY URGENCY
+    // ==========================================
+
+    let urgencyScore;
+    let urgencyReason;
+
+    if (daysRemaining < 0) {
+        urgencyScore = 50;
+        urgencyReason = "Coverage has already lapsed";
+    } else if (daysRemaining === 0) {
+        urgencyScore = 50;
+        urgencyReason = "Coverage ends today";
+    } else if (daysRemaining <= 7) {
+        urgencyScore = 50;
+        urgencyReason = `Coverage ends in ${daysRemaining} days`;
+    } else if (daysRemaining <= 30) {
+        urgencyScore = 30;
+        urgencyReason = `Coverage ends in ${daysRemaining} days`;
+    } else if (daysRemaining <= 90) {
+        urgencyScore = 15;
+        urgencyReason = `Coverage ends in ${daysRemaining} days`;
+    } else {
+        urgencyScore = 5;
+        urgencyReason = `Coverage has ${daysRemaining} days remaining`;
+    }
+
+    // ==========================================
+    // 2. ASSET VALUE
+    // ==========================================
+
+    const purchaseValue = Number(asset?.purchase_value) || 0;
 
     let valueScore;
     let valueReason;
 
-    const purchaseValue =
-        Number(asset.purchase_value) || 0;
-
     if (purchaseValue > 50000) {
-
         valueScore = 25;
-        valueReason =
-            "Asset value is above ₹50,000";
-
+        valueReason = "Asset value is above ₹50,000";
     } else if (purchaseValue >= 10000) {
-
         valueScore = 15;
-        valueReason =
-            "Asset value is between ₹10,000 and ₹50,000";
-
+        valueReason = "Asset value is between ₹10,000 and ₹50,000";
     } else {
-
         valueScore = 5;
-        valueReason =
-            "Asset value is below ₹10,000";
-
+        valueReason = "Asset value is below ₹10,000";
     }
 
-    // -----------------------------
-    // 3. Coverage situation
-    // -----------------------------
+    // ==========================================
+    // 3. COVERAGE SITUATION
+    // ==========================================
 
-    const coverageScore =
-        hasOverlap ? 10 : 0;
+    const coverageScore = hasOverlap ? 10 : 0;
 
     const coverageReason = hasOverlap
         ? "Potential coverage overlap detected"
         : "No potential coverage overlap detected";
 
-    // -----------------------------
-    // 4. Explain coverage urgency
-    // -----------------------------
-
-    let urgencyReason;
-
-    if (daysRemaining < 0) {
-
-        urgencyReason =
-            "Coverage has already lapsed";
-
-    } else if (daysRemaining === 0) {
-
-        urgencyReason =
-            "Coverage ends today";
-
-    } else if (daysRemaining <= 7) {
-
-        urgencyReason =
-            `Coverage ends in ${daysRemaining} days`;
-
-    } else if (daysRemaining <= 30) {
-
-        urgencyReason =
-            `Coverage ends in ${daysRemaining} days`;
-
-    } else if (daysRemaining <= 90) {
-
-        urgencyReason =
-            `Coverage ends in ${daysRemaining} days`;
-
-    } else {
-
-        urgencyReason =
-            `Coverage has ${daysRemaining} days remaining`;
-
-    }
-
-    // -----------------------------
-    // 5. Calculate total score
-    // -----------------------------
+    // ==========================================
+    // 4. TOTAL SCORE
+    // ==========================================
 
     const totalScore =
         urgencyScore +
         valueScore +
         coverageScore;
 
-    // -----------------------------
-    // 6. Determine priority
-    // -----------------------------
+    // ==========================================
+    // 5. PRIORITY CLASSIFICATION
+    // ==========================================
 
     let priority;
 
-    if (priorityStatus === "Lapsed") {
-
+    if (daysRemaining < 0) {
         priority = "Lapsed";
-
     } else if (daysRemaining <= 7) {
-
         priority = "Critical";
-
     } else if (totalScore >= 70) {
-
         priority = "Critical";
-
     } else if (totalScore >= 40) {
-
         priority = "Attention";
-
     } else {
-
         priority = "Safe";
-
     }
 
-    // -----------------------------
-    // 7. Explainable priority layer
-    // -----------------------------
+    // ==========================================
+    // 6. EXPLANATION
+    // ==========================================
 
     const explanation = {
-
         urgency_score: urgencyScore,
         urgency_reason: urgencyReason,
 
@@ -193,26 +160,19 @@ function calculatePriority(asset, coverage, hasOverlap) {
         value_reason: valueReason,
 
         coverage_score: coverageScore,
-        coverage_reason: coverageReason
-
+        coverage_reason: coverageReason,
     };
 
-    // -----------------------------
-    // 8. Return result
-    // -----------------------------
+    // ==========================================
+    // 7. RESULT
+    // ==========================================
 
     return {
-
         score: totalScore,
-
         priority,
-
         days_remaining: daysRemaining,
-
-        explanation
-
+        explanation,
     };
-
 }
 
 module.exports = calculatePriority;

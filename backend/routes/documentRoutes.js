@@ -275,4 +275,48 @@ router.delete(
   }
 );
 
+// PUT /api/documents/:document_id  (edit metadata)
+router.put("/:document_id", authMiddleware, async (req, res) => {
+  try {
+    const { document_id } = req.params;
+    const { document_type, coverage_id } = req.body;
+    if (!document_type || !document_type.trim()) {
+      return res.status(400).json({ message: "Document type is required" });
+    }
+    const [documents] = await db.query(
+      `SELECT d.document_id, d.asset_id 
+       FROM documents d 
+       JOIN assets a ON d.asset_id = a.asset_id 
+       WHERE d.document_id = ? AND a.user_id = ?`,
+      [document_id, req.user.user_id]
+    );
+    if (documents.length === 0) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+    if (coverage_id) {
+      const [coverage] = await db.query(
+        "SELECT coverage_id FROM coverage WHERE coverage_id = ? AND asset_id = ?",
+        [coverage_id, documents[0].asset_id]
+      );
+      if (coverage.length === 0) {
+        return res.status(400).json({ message: "Coverage does not belong to this asset" });
+      }
+    }
+    await db.query(
+      "UPDATE documents SET document_type = ?, coverage_id = ? WHERE document_id = ?",
+      [document_type.trim(), coverage_id || null, document_id]
+    );
+    res.json({ message: "Document updated successfully" });
+  } catch (error) {
+    console.error("Update document error:", error);
+    res.status(500).json({ message: "Failed to update document" });
+  }
+});
+
+// Handles upload errors (wrong file type, over 5 MB) as clean JSON
+router.use((err, req, res, next) => {
+  if (err) return res.status(400).json({ message: err.message });
+  next();
+});
+
 module.exports = router;

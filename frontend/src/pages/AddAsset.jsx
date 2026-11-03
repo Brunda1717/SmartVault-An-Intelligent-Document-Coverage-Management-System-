@@ -1,8 +1,11 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
 function AddAsset() {
     const navigate = useNavigate();
+    const { id } = useParams(); // only exists on /edit-asset/:id
+    const isEdit = Boolean(id);
+    const [pageLoading, setPageLoading] = useState(isEdit);
 
     const [form, setForm] = useState({
         asset_name: "",
@@ -24,6 +27,32 @@ function AddAsset() {
         { name: "Vehicle", icon: "🚗" },
         { name: "Other", icon: "◈" },
     ];
+
+    useEffect(() => {
+        if (!isEdit) return;
+        const load = async () => {
+            try {
+                const res = await fetch(`http://localhost:5000/api/assets/${id}`, {
+                    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+                });
+                const data = await res.json();
+                if (!res.ok) { setError(data.message || "Unable to load asset."); return; }
+                setForm({
+                    asset_name: data.asset_name || "",
+                    category: data.category || "",
+                    brand: data.brand || "",
+                    model: data.model || "",
+                    purchase_date: (data.purchase_date || "").slice(0, 10),
+                    purchase_value: String(data.purchase_value ?? ""),
+                });
+            } catch {
+                setError("Unable to connect to server.");
+            } finally {
+                setPageLoading(false);
+            }
+        };
+        load();
+    }, [id, isEdit]);
 
     const handleChange = (e) => {
         setForm({
@@ -60,9 +89,9 @@ function AddAsset() {
             const token = localStorage.getItem("token");
 
             const response = await fetch(
-                "http://localhost:5000/api/assets",
+                isEdit ? `http://localhost:5000/api/assets/${id}` : "http://localhost:5000/api/assets",
                 {
-                    method: "POST",
+                    method: isEdit ? "PUT" : "POST",
                     headers: {
                         "Content-Type": "application/json",
                         Authorization: `Bearer ${token}`,
@@ -81,13 +110,13 @@ function AddAsset() {
 
             if (!response.ok) {
                 setError(
-                    data.message || "Failed to create asset."
+                    data.message || (isEdit ? "Failed to update asset." : "Failed to create asset.")
                 );
                 setLoading(false);
                 return;
             }
 
-            navigate(`/asset/${data.asset_id}`);
+            navigate(isEdit ? `/asset/${id}` : `/asset/${data.asset_id}`);
         } catch (error) {
             console.error(error);
             setError("Unable to connect to server.");
@@ -95,6 +124,8 @@ function AddAsset() {
 
         setLoading(false);
     };
+
+    if (pageLoading) return <div className="dashboard-loading"><div className="dashboard-loader" /></div>;
 
     return (
         <div className="add-asset-page">
@@ -108,9 +139,9 @@ function AddAsset() {
 
                     <button
                         className="back-button"
-                        onClick={() => navigate("/dashboard")}
+                        onClick={() => navigate(isEdit ? `/asset/${id}` : "/dashboard")}
                     >
-                        ← Dashboard
+                        ← {isEdit ? "Back to Asset" : "Dashboard"}
                     </button>
 
                     <div className="add-asset-title">
@@ -119,7 +150,7 @@ function AddAsset() {
                         </span>
 
                         <h1>
-                            Add a new asset
+                            {isEdit ? "Edit asset" : "Add a new asset"}
                         </h1>
 
                         <p>
@@ -392,7 +423,7 @@ function AddAsset() {
                                     className="form-cancel-button"
                                     onClick={() =>
                                         navigate(
-                                            "/dashboard"
+                                            isEdit ? `/asset/${id}` : "/dashboard"
                                         )
                                     }
                                 >
@@ -407,11 +438,11 @@ function AddAsset() {
                                     {loading ? (
                                         <>
                                             <span className="button-spinner" />
-                                            Creating...
+                                            {isEdit ? "Saving..." : "Creating..."}
                                         </>
                                     ) : (
                                         <>
-                                            Create asset
+                                            {isEdit ? "Save changes" : "Create asset"}
                                             <span>→</span>
                                         </>
                                     )}

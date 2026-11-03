@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import OverlapExplainer from "../components/OverlapExplainer";
 
 function AssetDetails() {
     const { id } = useParams();
@@ -12,6 +13,9 @@ function AssetDetails() {
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+
+    const [editingDoc, setEditingDoc] = useState(null);
+    const [docForm, setDocForm] = useState({ document_type: "", coverage_id: "" });
 
     useEffect(() => {
         const fetchData = async () => {
@@ -364,6 +368,56 @@ function AssetDetails() {
         }
     };
 
+    const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
+    const dangerStyle = { background: "#dc2626", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer", font: "inherit" };
+    const editStyle = { background: "transparent", color: "inherit", border: "1px solid currentColor", borderRadius: 8, padding: "8px 14px", cursor: "pointer", font: "inherit" };
+
+    const callDelete = async (url, okAction) => {
+        try {
+            const res = await fetch(url, { method: "DELETE", headers: authHeader() });
+            if (res.ok) { okAction(); return; }
+            const r = await res.json().catch(() => ({}));
+            alert(r.message || "Delete failed.");
+        } catch {
+            alert("Unable to connect to server.");
+        }
+    };
+
+    const handleDeleteAsset = () => {
+        if (!window.confirm(`Delete "${asset.asset_name}"?\n\nAll its coverage records and uploaded documents will be permanently removed.`)) return;
+        callDelete(`http://localhost:5000/api/assets/${id}`, () => navigate("/dashboard"));
+    };
+
+    const handleDeleteCoverage = (item) => {
+        if (!window.confirm(`Delete this ${item.coverage_type} record?\n\nDocuments linked to it will be kept in the vault.`)) return;
+        callDelete(`http://localhost:5000/api/coverage/${item.coverage_id}`, () => window.location.reload());
+    };
+
+    const handleDeleteDocument = (doc) => {
+        if (!window.confirm(`Delete "${doc.file_name}"? The file will be permanently removed.`)) return;
+        callDelete(`http://localhost:5000/api/documents/${doc.document_id}`, () => window.location.reload());
+    };
+
+    const openEditDocument = (doc) => {
+        setEditingDoc(doc);
+        setDocForm({ document_type: doc.document_type || "Other", coverage_id: doc.coverage_id || "" });
+    };
+
+    const saveDocument = async (e) => {
+        e.preventDefault();
+        const res = await fetch(`http://localhost:5000/api/documents/${editingDoc.document_id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json", ...authHeader() },
+            body: JSON.stringify({
+                document_type: docForm.document_type,
+                coverage_id: docForm.coverage_id || null,
+            }),
+        });
+        if (res.ok) { window.location.reload(); return; }
+        const r = await res.json().catch(() => ({}));
+        alert(r.message || "Update failed.");
+    };
+
     return (
         <div className="asset-details-page">
 
@@ -388,6 +442,9 @@ function AssetDetails() {
                     </button>
 
                     <div className="details-header-actions">
+
+                        <button style={editStyle} onClick={() => navigate(`/edit-asset/${id}`)}>✎ Edit</button>
+                        <button style={dangerStyle} onClick={handleDeleteAsset}>Delete</button>
 
                         <button
                             className="details-secondary-btn"
@@ -559,87 +616,7 @@ function AssetDetails() {
 
                 </section>
 
-                {/* =========================
-                    OVERLAP ALERT
-                ========================= */}
-
-                {overlaps.length > 0 && (
-                    <section className="details-overlap-alert">
-
-                        <div className="overlap-alert-icon">
-                            !
-                        </div>
-
-                        <div className="overlap-alert-content">
-
-                            <div className="overlap-alert-title">
-
-                                <span>
-                                    POTENTIAL OVERLAP DETECTED
-                                </span>
-
-                                <strong>
-                                    {overlaps.length} overlap
-                                    {overlaps.length > 1
-                                        ? "s"
-                                        : ""}
-                                </strong>
-
-                            </div>
-
-                            <p>
-                                Some coverage periods
-                                overlap. This does not
-                                necessarily mean duplicate
-                                protection. Review the
-                                actual coverage terms.
-                            </p>
-
-                            <div className="overlap-alert-list">
-
-                                {overlaps.map(
-                                    (
-                                        overlap,
-                                        index
-                                    ) => (
-                                        <div
-                                            key={index}
-                                            className="overlap-alert-item"
-                                        >
-
-                                            <span>
-                                                {
-                                                    overlap.coverage_1_type
-                                                }
-                                            </span>
-
-                                            <b>
-                                                ↔
-                                            </b>
-
-                                            <span>
-                                                {
-                                                    overlap.coverage_2_type
-                                                }
-                                            </span>
-
-                                            <small>
-                                                {
-                                                    overlap.overlap_days
-                                                }{" "}
-                                                days
-                                            </small>
-
-                                        </div>
-                                    )
-                                )}
-
-                            </div>
-
-                        </div>
-
-                    </section>
-                )}
+                <OverlapExplainer assetId={id} />
 
                 {/* =========================
                     COVERAGE TIMELINE
@@ -785,6 +762,11 @@ function AssetDetails() {
                                                             </span>
                                                         )}
 
+                                                    </div>
+
+                                                    <div style={{ display: "flex", gap: 8, margin: "10px 0" }}>
+                                                        <button style={editStyle} onClick={() => navigate(`/asset/${id}/edit-coverage/${item.coverage_id}`)}>✎ Edit</button>
+                                                        <button style={dangerStyle} onClick={() => handleDeleteCoverage(item)}>Delete</button>
                                                     </div>
 
                                                     {/* DATES */}
@@ -1242,6 +1224,9 @@ function AssetDetails() {
                                                     Download
                                                 </button>
 
+                                                <button type="button" style={editStyle} onClick={() => openEditDocument(document)}>Edit</button>
+                                                <button type="button" style={dangerStyle} onClick={() => handleDeleteDocument(document)}>Delete</button>
+
                                             </div>
 
                                         </div>
@@ -1274,6 +1259,33 @@ function AssetDetails() {
                     </button>
 
                 </div>
+
+                {editingDoc && (
+                    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", zIndex: 1000 }}
+                         onClick={() => setEditingDoc(null)}>
+                        <form onSubmit={saveDocument} onClick={(e) => e.stopPropagation()}
+                              style={{ background: "#111827", color: "#fff", padding: 24, borderRadius: 14, width: 360, display: "grid", gap: 12 }}>
+                            <h3>Edit document</h3>
+                            <label>Document type
+                                <select value={docForm.document_type} style={{ width: "100%" }}
+                                        onChange={(e) => setDocForm({ ...docForm, document_type: e.target.value })}>
+                                    {["Warranty Document", "Insurance Policy", "Purchase Invoice", "Protection Plan", "Other"].map((t) => <option key={t}>{t}</option>)}
+                                </select>
+                            </label>
+                            <label>Linked coverage
+                                <select value={docForm.coverage_id} style={{ width: "100%" }}
+                                        onChange={(e) => setDocForm({ ...docForm, coverage_id: e.target.value })}>
+                                    <option value="">None (asset only)</option>
+                                    {coverage.map((c) => <option key={c.coverage_id} value={c.coverage_id}>{c.coverage_type} – {c.provider || "Unknown"}</option>)}
+                                </select>
+                            </label>
+                            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                                <button type="button" style={editStyle} onClick={() => setEditingDoc(null)}>Cancel</button>
+                                <button type="submit" style={{ ...dangerStyle, background: "#2563eb" }}>Save</button>
+                            </div>
+                        </form>
+                    </div>
+                )}
 
             </div>
         </div>
