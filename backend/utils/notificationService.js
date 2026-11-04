@@ -49,28 +49,31 @@ function buildExpiryText(c, daysLeft, stage) {
 
     if (stage === "expired") {
         return {
-            title: `Expired: ${c.coverage_type} (${c.asset_name})`,
-            message: `Your ${what} expired on ${end}. The asset is no longer protected by this plan. Renew it or arrange new coverage.`,
+            title: `Coverage ended: ${c.coverage_type} (${c.asset_name})`,
+            message: `Your ${what} coverage ended on ${end}. Consider renewing it or arranging new coverage.`,
         };
     }
+
     if (stage === "today") {
         const h = hoursLeftToday();
         return {
-            title: `Expires today: ${c.coverage_type} (${c.asset_name})`,
-            message: `Your ${what} expires today (${end}), in about ${h} hour${h === 1 ? "" : "s"}. Renew now if you want continuous protection.`,
+            title: `Coverage ends today: ${c.coverage_type} (${c.asset_name})`,
+            message: `Your ${what} coverage ends today (${end}), in approximately ${h} hour${h === 1 ? "" : "s"}. Consider renewing it to maintain continuous protection.`,
         };
     }
+
     const d = `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+
     const hint =
-        stage === "30d" ? "Start checking renewal options."
-        : stage === "15d" ? "Time to decide: renew, replace or let it lapse."
-        : "Renew or replace it soon.";
+        stage === "30d" ? "Start exploring renewal options."
+        : stage === "15d" ? "Review your options: renew, replace or let it end."
+        : "Consider renewing or arranging new coverage soon.";
+
     return {
-        title: `${d} left: ${c.coverage_type} (${c.asset_name})`,
-        message: `Your ${what} expires on ${end} (${d} left). ${hint}`,
+        title: `Coverage ends in ${d}: ${c.coverage_type} (${c.asset_name})`,
+        message: `Your ${what} coverage ends on ${end} (${d} remaining). ${hint}`,
     };
 }
-
 const emailHtml = (title, message, assetId) => `
 <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:24px;border:1px solid #e5e7eb;border-radius:12px">
   <h2 style="margin-top:0;color:#111827">${esc(title)}</h2>
@@ -81,7 +84,7 @@ const emailHtml = (title, message, assetId) => `
 
 // ---------- create the in-app notification + send the email (once) ----------
 async function notify({ user, assetId, coverageId, type, severity, title, message, key }) {
-    // INSERT IGNORE + UNIQUE dedupe_key => the same reminder can never be created twice
+
     const [result] = await db.query(
         `INSERT IGNORE INTO notifications
          (user_id, asset_id, coverage_id, notification_type, severity, title, message, dedupe_key)
@@ -89,7 +92,33 @@ async function notify({ user, assetId, coverageId, type, severity, title, messag
         [user.user_id, assetId, coverageId || null, type, severity, title, message, key]
     );
 
-    if (result.affectedRows === 0) return false; // already sent before
+    let notificationId;
+
+    if (result.affectedRows > 0) {
+        notificationId = result.insertId;
+    } else {
+        const [existing] = await db.query(
+            `SELECT notification_id
+             FROM notifications
+             WHERE dedupe_key = ?`,
+            [key]
+        );
+
+        if (!existing.length) return false;
+
+        notificationId = existing[0].notification_id;
+    }
+
+    // Claim the notification so concurrent checks cannot send it twice.
+    const [claim] = await db.query(
+        `UPDATE notifications
+         SET email_status = 'sending'
+         WHERE notification_id = ?
+         AND email_status IN ('pending', 'failed')`,
+        [notificationId]
+    );
+
+    if (claim.affectedRows === 0) return false;
 
     const status = await sendEmail({
         to: user.email,
@@ -98,12 +127,15 @@ async function notify({ user, assetId, coverageId, type, severity, title, messag
         html: emailHtml(title, message, assetId),
     });
 
-    await db.query("UPDATE notifications SET email_status = ? WHERE notification_id = ?", [
-        status, result.insertId,
-    ]);
+    await db.query(
+        `UPDATE notifications
+         SET email_status = ?
+         WHERE notification_id = ?`,
+        [status, notificationId]
+    );
+
     return true;
 }
-
 // ---------- main job: expiry reminders + overlap alerts ----------
 async function runNotificationChecks({ userId = null, assetId = null } = {}) {
     let sql = `SELECT c.*, a.asset_name, a.user_id, u.email

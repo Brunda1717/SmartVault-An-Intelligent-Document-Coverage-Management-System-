@@ -34,6 +34,10 @@ function NotificationBell() {
 
     useEffect(() => {
         load();
+          if (sessionStorage.getItem("showNotifications") === "true") {
+        setOpen(true);
+        sessionStorage.removeItem("showNotifications");
+    }
         const timer = setInterval(load, 60000);
         return () => clearInterval(timer);
     }, [load]);

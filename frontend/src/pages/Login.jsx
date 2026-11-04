@@ -39,6 +39,7 @@ function Login() {
             }
 
             localStorage.setItem("token", data.token);
+            sessionStorage.setItem("showNotifications", "true");
 
             navigate("/dashboard");
         } catch (error) {
