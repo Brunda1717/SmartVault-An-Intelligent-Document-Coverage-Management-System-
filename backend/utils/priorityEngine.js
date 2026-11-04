@@ -1,8 +1,6 @@
 function getCalendarDate(value) {
     if (!value) return null;
 
-    // MySQL DATE values normally arrive as YYYY-MM-DD.
-    // Parse date-only values as UTC to avoid timezone shifts.
     const dateString =
         value instanceof Date
             ? value.toISOString().slice(0, 10)
@@ -13,10 +11,8 @@ function getCalendarDate(value) {
     }
 
     const [year, month, day] = dateString.split("-").map(Number);
-
     const date = new Date(Date.UTC(year, month - 1, day));
 
-    // Reject impossible calendar dates.
     if (
         date.getUTCFullYear() !== year ||
         date.getUTCMonth() !== month - 1 ||
@@ -31,7 +27,6 @@ function getCalendarDate(value) {
 function calculatePriority(asset, coverage, hasOverlap = false) {
     const today = new Date();
 
-    // Use today's local calendar date, then compare UTC calendar dates.
     const todayUTC = new Date(
         Date.UTC(
             today.getFullYear(),
@@ -40,16 +35,19 @@ function calculatePriority(asset, coverage, hasOverlap = false) {
         )
     );
 
+    const startDateUTC = getCalendarDate(coverage?.start_date);
     const endDateUTC = getCalendarDate(coverage?.end_date);
 
-    if (!endDateUTC) {
+    if (!startDateUTC || !endDateUTC) {
         return {
             score: 0,
             priority: "Unknown",
             days_remaining: null,
+            days_until_start: null,
+            coverage_status: "Unknown",
             explanation: {
                 urgency_score: 0,
-                urgency_reason: "Coverage end date is missing or invalid",
+                urgency_reason: "Coverage start or end date is missing or invalid",
                 value_score: 0,
                 value_reason: "Asset value could not be evaluated",
                 coverage_score: 0,
@@ -58,11 +56,19 @@ function calculatePriority(asset, coverage, hasOverlap = false) {
         };
     }
 
-    // Difference in whole calendar days.
+    const daysUntilStart = Math.round(
+        (startDateUTC.getTime() - todayUTC.getTime()) /
+            (1000 * 60 * 60 * 24)
+    );
+
     const daysRemaining = Math.round(
         (endDateUTC.getTime() - todayUTC.getTime()) /
             (1000 * 60 * 60 * 24)
     );
+
+    const isUpcoming = daysUntilStart > 0;
+
+    const isExpired = daysRemaining < 0;
 
     // ==========================================
     // 1. EXPIRY URGENCY
@@ -71,7 +77,10 @@ function calculatePriority(asset, coverage, hasOverlap = false) {
     let urgencyScore;
     let urgencyReason;
 
-    if (daysRemaining < 0) {
+    if (isUpcoming) {
+        urgencyScore = 0;
+        urgencyReason = `Coverage starts in ${daysUntilStart} days`;
+    } else if (daysRemaining < 0) {
         urgencyScore = 50;
         urgencyReason = "Coverage has already lapsed";
     } else if (daysRemaining === 0) {
@@ -136,8 +145,10 @@ function calculatePriority(asset, coverage, hasOverlap = false) {
 
     let priority;
 
-    if (daysRemaining < 0) {
+    if (isExpired) {
         priority = "Lapsed";
+    } else if (isUpcoming) {
+        priority = "Safe";
     } else if (daysRemaining <= 7) {
         priority = "Critical";
     } else if (totalScore >= 70) {
@@ -155,10 +166,8 @@ function calculatePriority(asset, coverage, hasOverlap = false) {
     const explanation = {
         urgency_score: urgencyScore,
         urgency_reason: urgencyReason,
-
         value_score: valueScore,
         value_reason: valueReason,
-
         coverage_score: coverageScore,
         coverage_reason: coverageReason,
     };
@@ -171,6 +180,12 @@ function calculatePriority(asset, coverage, hasOverlap = false) {
         score: totalScore,
         priority,
         days_remaining: daysRemaining,
+        days_until_start: isUpcoming ? daysUntilStart : 0,
+        coverage_status: isUpcoming
+            ? "Upcoming"
+            : isExpired
+                ? "Expired"
+                : "Active",
         explanation,
     };
 }
