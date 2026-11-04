@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import NotificationBell from "../components/NotificationBell";
 
 function Dashboard() {
     const navigate = useNavigate();
@@ -155,7 +156,7 @@ function Dashboard() {
     const fmtDate = (d) =>
         d
             ? new Date(d + "T00:00:00").toLocaleDateString("en-IN", {
-                  day: "numeric", month: "short", year: "numeric",
+                day: "numeric", month: "short", year: "numeric",
               })
             : "—";
 
@@ -187,6 +188,8 @@ function Dashboard() {
                 </div>
 
                 <div className="dashboard-hero-actions">
+
+                    <NotificationBell />
 
                     <button
                         className="dashboard-secondary-button"

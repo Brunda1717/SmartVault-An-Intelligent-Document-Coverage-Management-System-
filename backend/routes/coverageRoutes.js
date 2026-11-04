@@ -3,6 +3,7 @@ const db = require("../db");
 const authMiddleware = require("../middleware/authMiddleware");
 const findOverlaps = require("../utils/overlapChecker");
 const calculatePriority = require("../utils/priorityEngine");
+const { runNotificationChecks } = require("../utils/notificationService");
 
 const router = express.Router();
 
@@ -76,6 +77,8 @@ router.post("/", authMiddleware, async (req, res) => {
             ]
         );
 
+        runNotificationChecks({ assetId: asset_id }).catch(console.error);
+
         res.status(201).json({
             message: "Coverage added successfully",
             coverage_id: result.insertId,
@@ -143,7 +146,7 @@ router.put("/:coverage_id", authMiddleware, async (req, res) => {
         } = req.body;
 
         const [records] = await db.query(
-            `SELECT c.coverage_id
+            `SELECT c.coverage_id, c.asset_id
              FROM coverage c
              JOIN assets a ON c.asset_id = a.asset_id
              WHERE c.coverage_id = ?
@@ -197,6 +200,8 @@ router.put("/:coverage_id", authMiddleware, async (req, res) => {
                 coverage_id,
             ]
         );
+
+        runNotificationChecks({ assetId: records[0].asset_id }).catch(console.error);
 
         res.json({
             message: "Coverage updated successfully",

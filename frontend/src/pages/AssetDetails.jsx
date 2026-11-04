@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import OverlapExplainer from "../components/OverlapExplainer";
+import NotificationBell from "../components/NotificationBell";
 
 function AssetDetails() {
     const { id } = useParams();
@@ -442,6 +443,8 @@ function AssetDetails() {
                     </button>
 
                     <div className="details-header-actions">
+
+                        <NotificationBell />
 
                         <button style={editStyle} onClick={() => navigate(`/edit-asset/${id}`)}>✎ Edit</button>
                         <button style={dangerStyle} onClick={handleDeleteAsset}>Delete</button>

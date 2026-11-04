@@ -6,6 +6,8 @@ const authRoutes = require("./routes/auth");
 const assetRoutes = require("./routes/assetRoutes");
 const coverageRoutes = require("./routes/coverageRoutes");
 const documentRoutes = require("./routes/documentRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
+const { startScheduler } = require("./utils/scheduler");
 
 const app = express();
 
@@ -15,6 +17,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/assets", assetRoutes);
 app.use("/api/coverage", coverageRoutes);
 app.use("/api/documents", documentRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.get("/", (req, res) => {
     res.json({
@@ -34,10 +37,10 @@ app.get("/api/test-db", async (req, res) => {
     } catch (error) {
         console.error("DATABASE ERROR:", error);
 
-res.status(500).json({
-    message: "Database connection failed",
-    error: error.message
-});
+        res.status(500).json({
+            message: "Database connection failed",
+            error: error.message
+        });
     }
 });
 
@@ -45,4 +48,5 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
     console.log(`SmartVault backend running on port ${PORT}`);
+    startScheduler();
 });
