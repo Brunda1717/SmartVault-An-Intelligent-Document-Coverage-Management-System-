@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import ScanDocument, { ScanBadge } from "../components/ScanDocument";
 
 function AddCoverage() {
-    const { id } = useParams();
+    const { id, coverageId } = useParams();
+    const isEdit = Boolean(coverageId);
     const navigate = useNavigate();
 
     const [asset, setAsset] = useState(null);
@@ -12,10 +14,15 @@ function AddCoverage() {
         policy_number: "",
         start_date: "",
         end_date: "",
+        status: "",
     });
 
     const [documentFile, setDocumentFile] = useState(null);
     const [documentType, setDocumentType] = useState("Warranty Document");
+
+    const [scanMeta, setScanMeta] = useState({});
+    const [scanUsed, setScanUsed] = useState(false);
+    const [verified, setVerified] = useState(false);
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -45,6 +52,25 @@ function AddCoverage() {
                     return;
                 }
 
+                if (coverageId) {
+                    const covRes = await fetch(`http://localhost:5000/api/coverage/asset/${id}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    const covList = await covRes.json();
+                    const existing = Array.isArray(covList)
+                        ? covList.find((c) => String(c.coverage_id) === String(coverageId))
+                        : null;
+                    if (!existing) { setError("Coverage not found."); return; }
+                    setForm({
+                        coverage_type: existing.coverage_type,
+                        provider: existing.provider || "",
+                        policy_number: existing.policy_number || "",
+                        start_date: (existing.start_date || "").slice(0, 10),
+                        end_date: (existing.end_date || "").slice(0, 10),
+                        status: existing.status || "",
+                    });
+                }
+
                 setAsset(data);
             } catch (err) {
                 console.error(err);
@@ -57,7 +83,7 @@ function AddCoverage() {
         };
 
         fetchAsset();
-    }, [id]);
+    }, [id, coverageId]);
 
     const handleChange = (e) => {
         setForm({
@@ -85,6 +111,22 @@ function AddCoverage() {
 
     const duration = calculateDays();
 
+    const handleScanResult = (r) => {
+        setForm((prev) => {
+            const next = { ...prev };
+            Object.entries(r.fields).forEach(([key, value]) => {
+                if (value) next[key] = value;
+            });
+            return next;
+        });
+        if (r.documentType) setDocumentType(r.documentType);
+        setDocumentFile(r.file || null);
+        setScanMeta(r.meta || {});
+        setScanUsed(true);
+        setVerified(false);
+        setError("");
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -111,15 +153,20 @@ function AddCoverage() {
             return;
         }
 
+        if (scanUsed && !verified) {
+            setError("Please tick the box to confirm you have checked the details read from your document.");
+            return;
+        }
+
         setSaving(true);
 
         try {
             const token = localStorage.getItem("token");
 
             const response = await fetch(
-                "http://localhost:5000/api/coverage",
+                isEdit ? `http://localhost:5000/api/coverage/${coverageId}` : "http://localhost:5000/api/coverage",
                 {
-                    method: "POST",
+                    method: isEdit ? "PUT" : "POST",
                     headers: {
                         "Content-Type": "application/json",
                         Authorization: `Bearer ${token}`,
@@ -135,6 +182,7 @@ function AddCoverage() {
                             form.start_date,
                         end_date:
                             form.end_date,
+                        status: form.status,
                     }),
                 }
             );
@@ -144,14 +192,14 @@ function AddCoverage() {
             if (!response.ok) {
                 setError(
                     data.message ||
-                        "Failed to add coverage."
+                        (isEdit ? "Failed to update coverage." : "Failed to add coverage.")
                 );
                 setSaving(false);
                 return;
             }
 
-            /* Upload document only if the user selected one */
-            if (documentFile) {
+            /* Upload document only if not editing and the user selected one */
+            if (!isEdit && documentFile) {
                 const documentFormData = new FormData();
 
                 documentFormData.append(
@@ -239,6 +287,15 @@ function AddCoverage() {
         );
     }
 
+    const baseTypes = [
+        { name: "Warranty", icon: "◈", text: "Manufacturer warranty" },
+        { name: "Extended Warranty", icon: "✦", text: "Extended protection" },
+        { name: "Insurance", icon: "◆", text: "Insurance policy" },
+    ];
+    const typeOptions = baseTypes.some((t) => t.name === form.coverage_type)
+        ? baseTypes
+        : [...baseTypes, { name: form.coverage_type, icon: "◇", text: "Current type" }];
+
     return (
         <div className="add-coverage-page">
 
@@ -266,12 +323,11 @@ function AddCoverage() {
                         </span>
 
                         <h1>
-                            Add coverage
+                            {isEdit ? "Edit coverage" : "Add coverage"}
                         </h1>
 
                         <p>
-                            Track another layer of protection
-                            for your asset.
+                            {isEdit ? "Modify protection details for your asset." : "Track another layer of protection for your asset."}
                         </p>
                     </div>
 
@@ -291,7 +347,7 @@ function AddCoverage() {
                     </div>
 
                     <div>
-                        <span>ADDING COVERAGE TO</span>
+                        <span>{isEdit ? "EDITING COVERAGE FOR" : "ADDING COVERAGE TO"}</span>
                         <h2>{asset?.asset_name}</h2>
                         <p>
                             {asset?.brand || "Unknown brand"}
@@ -343,36 +399,19 @@ function AddCoverage() {
 
                         <form onSubmit={handleSubmit}>
 
+                            {!isEdit && <ScanDocument asset={asset} onResult={handleScanResult} />}
+
                             <div className="coverage-field">
 
                                 <label>
                                     Coverage type
                                     <span>*</span>
                                 </label>
+                                <ScanBadge meta={scanMeta.coverage_type} current={form.coverage_type} />
 
                                 <div className="coverage-type-grid">
 
-                                    {[
-                                        {
-                                            name: "Warranty",
-                                            icon: "◈",
-                                            text:
-                                                "Manufacturer warranty",
-                                        },
-                                        {
-                                            name:
-                                                "Extended Warranty",
-                                            icon: "✦",
-                                            text:
-                                                "Extended protection",
-                                        },
-                                        {
-                                            name: "Insurance",
-                                            icon: "◆",
-                                            text:
-                                                "Insurance policy",
-                                        },
-                                    ].map(
+                                    {typeOptions.map(
                                         (item) => (
                                             <button
                                                 type="button"
@@ -431,6 +470,7 @@ function AddCoverage() {
                                         }
                                         placeholder="e.g. Sony, Samsung Care"
                                     />
+                                    <ScanBadge meta={scanMeta.provider} current={form.provider} />
 
                                 </div>
 
@@ -450,6 +490,7 @@ function AddCoverage() {
                                         }
                                         placeholder="e.g. WAR-2026-001"
                                     />
+                                    <ScanBadge meta={scanMeta.policy_number} current={form.policy_number} />
 
                                 </div>
 
@@ -474,6 +515,7 @@ function AddCoverage() {
                                             handleChange
                                         }
                                     />
+                                    <ScanBadge meta={scanMeta.start_date} current={form.start_date} />
 
                                 </div>
 
@@ -494,6 +536,7 @@ function AddCoverage() {
                                             handleChange
                                         }
                                     />
+                                    <ScanBadge meta={scanMeta.end_date} current={form.end_date} />
 
                                 </div>
 
@@ -529,91 +572,103 @@ function AddCoverage() {
                                 </div>
                             )}
 
-                            <div className="coverage-document-section">
+                            {!isEdit && (
+                                <div className="coverage-document-section">
 
-                                <div className="coverage-document-heading">
-                                    <div>
-                                        <span>SUPPORTING DOCUMENT</span>
-                                        <h3>Attach your coverage document</h3>
-                                        <p>
-                                            Upload the warranty, policy, invoice, or protection
-                                            document associated with this coverage.
-                                        </p>
+                                    <div className="coverage-document-heading">
+                                        <div>
+                                            <span>SUPPORTING DOCUMENT</span>
+                                            <h3>Attach your coverage document</h3>
+                                            <p>
+                                                Upload the warranty, policy, invoice, or protection
+                                                document associated with this coverage.
+                                            </p>
+                                        </div>
+
+                                        <span className="document-optional">
+                                            OPTIONAL
+                                        </span>
                                     </div>
 
-                                    <span className="document-optional">
-                                        OPTIONAL
+                                    <div className="coverage-document-grid">
+
+                                        <div className="coverage-field">
+                                            <label>Document type</label>
+
+                                            <select
+                                                value={documentType}
+                                                onChange={(e) =>
+                                                    setDocumentType(e.target.value)
+                                                }
+                                            >
+                                                <option>Warranty Document</option>
+                                                <option>Insurance Policy</option>
+                                                <option>Purchase Invoice</option>
+                                                <option>Protection Plan</option>
+                                                <option>Other</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="coverage-document-upload">
+
+                                            <input
+                                                id="coverage-document"
+                                                type="file"
+                                                accept=".pdf,.jpg,.jpeg,.png"
+                                                onChange={(e) =>
+                                                    setDocumentFile(
+                                                        e.target.files?.[0] || null
+                                                    )
+                                                }
+                                                hidden
+                                            />
+
+                                            <label
+                                                htmlFor="coverage-document"
+                                                className="document-upload-box"
+                                            >
+                                                <span className="document-upload-icon">
+                                                    📄
+                                                </span>
+
+                                                <div>
+                                                    <strong>
+                                                        {documentFile
+                                                            ? documentFile.name
+                                                            : "Choose a document"}
+                                                    </strong>
+
+                                                    <small>
+                                                        {documentFile
+                                                            ? `${(
+                                                                documentFile.size /
+                                                                (1024 * 1024)
+                                                              ).toFixed(2)} MB`
+                                                            : "PDF, JPG or PNG • Max 5 MB"}
+                                                    </small>
+                                                </div>
+
+                                                <span className="document-upload-action">
+                                                    Browse
+                                                </span>
+                                            </label>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+                            )}
+
+                            {scanUsed && (
+                                <label style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: 14, margin: "16px 0", borderRadius: 12, background: verified ? "#dcfce7" : "#fef3c7", color: "#1f2937", cursor: "pointer", fontSize: 14, lineHeight: 1.5 }}>
+                                    <input type="checkbox" checked={verified} onChange={(e) => setVerified(e.target.checked)} style={{ marginTop: 3 }} />
+                                    <span>
+                                        <strong>I have checked these details against my document.</strong>{" "}
+                                        They were read automatically and can contain mistakes, so please confirm every field above is correct.
                                     </span>
-                                </div>
-
-                                <div className="coverage-document-grid">
-
-                                    <div className="coverage-field">
-                                        <label>Document type</label>
-
-                                        <select
-                                            value={documentType}
-                                            onChange={(e) =>
-                                                setDocumentType(e.target.value)
-                                            }
-                                        >
-                                            <option>Warranty Document</option>
-                                            <option>Insurance Policy</option>
-                                            <option>Purchase Invoice</option>
-                                            <option>Protection Plan</option>
-                                            <option>Other</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="coverage-document-upload">
-
-                                        <input
-                                            id="coverage-document"
-                                            type="file"
-                                            accept=".pdf,.jpg,.jpeg,.png"
-                                            onChange={(e) =>
-                                                setDocumentFile(
-                                                    e.target.files?.[0] || null
-                                                )
-                                            }
-                                            hidden
-                                        />
-
-                                        <label
-                                            htmlFor="coverage-document"
-                                            className="document-upload-box"
-                                        >
-                                            <span className="document-upload-icon">
-                                                📄
-                                            </span>
-
-                                            <div>
-                                                <strong>
-                                                    {documentFile
-                                                        ? documentFile.name
-                                                        : "Choose a document"}
-                                                </strong>
-
-                                                <small>
-                                                    {documentFile
-                                                        ? `${(
-                                                              documentFile.size /
-                                                              (1024 * 1024)
-                                                          ).toFixed(2)} MB`
-                                                        : "PDF, JPG or PNG • Max 5 MB"}
-                                                </small>
-                                            </div>
-
-                                            <span className="document-upload-action">
-                                                Browse
-                                            </span>
-                                        </label>
-
-                                    </div>
-
-                                </div>
-
-                            </div>
+                                </label>
+                            )}
 
                             {error && (
                                 <div className="coverage-form-error">
@@ -648,7 +703,7 @@ function AddCoverage() {
                                         </>
                                     ) : (
                                         <>
-                                            Save coverage
+                                            {isEdit ? "Save changes" : "Save coverage"}
                                             <span>→</span>
                                         </>
                                     )}
