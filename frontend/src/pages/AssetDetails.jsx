@@ -18,6 +18,11 @@ function AssetDetails() {
     const [editingDoc, setEditingDoc] = useState(null);
     const [docForm, setDocForm] = useState({ document_type: "", coverage_id: "" });
 
+    const [showUploadForm, setShowUploadForm] = useState(false);
+    const [uploadFile, setUploadFile] = useState(null);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState("");
+
     useEffect(() => {
         const fetchData = async () => {
             const token = localStorage.getItem("token");
@@ -153,6 +158,83 @@ function AssetDetails() {
 
         fetchData();
     }, [id]);
+
+    const handleUploadAssetDocument = async (e) => {
+        e.preventDefault();
+
+        if (!uploadFile) {
+            setUploadError("Please select a document.");
+            return;
+        }
+
+        if (uploadFile.size > 5 * 1024 * 1024) {
+            setUploadError("File size must be 5 MB or less.");
+            return;
+        }
+
+        const allowedTypes = [
+            "application/pdf",
+            "image/jpeg",
+            "image/png",
+        ];
+
+        if (!allowedTypes.includes(uploadFile.type)) {
+            setUploadError("Only PDF, JPG, and PNG files are allowed.");
+            return;
+        }
+
+        try {
+            setUploading(true);
+            setUploadError("");
+
+            const formData = new FormData();
+            formData.append("document", uploadFile);
+            formData.append("asset_id", id);
+            formData.append("document_type", "Other");
+
+            const response = await fetch(
+                "http://localhost:5000/api/documents",
+                {
+                    method: "POST",
+                    headers: authHeader(),
+                    body: formData,
+                }
+            );
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || "Document upload failed.");
+            }
+
+            // Refresh the asset's document list.
+            const documentsResponse = await fetch(
+                `http://localhost:5000/api/documents/asset/${id}`,
+                {
+                    headers: authHeader(),
+                }
+            );
+
+            const documentsData = await documentsResponse.json();
+
+            if (!documentsResponse.ok) {
+                throw new Error("Document uploaded, but the list could not be refreshed.");
+            }
+
+            setDocuments(
+                Array.isArray(documentsData)
+                    ? documentsData
+                    : documentsData.documents || []
+            );
+
+            setUploadFile(null);
+            setShowUploadForm(false);
+        } catch (error) {
+            setUploadError(error.message || "Something went wrong.");
+        } finally {
+            setUploading(false);
+        }
+    };
 
     // =========================
     // LOADING
@@ -810,10 +892,11 @@ function AssetDetails() {
 
                                                         {priority && (
                                                             <strong className="coverage-days">
-                                                                {
-                                                                    priority.days_remaining
-                                                                }{" "}
-                                                                days
+                                                                {priority.coverage_status === "Upcoming"
+                                                                    ? `Starts in ${priority.days_until_start} days`
+                                                                    : priority.coverage_status === "Expired"
+                                                                        ? `Expired ${Math.abs(priority.days_remaining)} days ago`
+                                                                        : `${priority.days_remaining} days remaining`}
                                                             </strong>
                                                         )}
 
@@ -870,12 +953,11 @@ function AssetDetails() {
                                                                 </span>
 
                                                                 <span>
-
-                                                                    {priority.days_remaining <
-                                                                    0
-                                                                        ? "Coverage has expired"
-                                                                        : `${priority.days_remaining} days remaining`}
-
+                                                                    {priority.coverage_status === "Upcoming"
+                                                                        ? `Starts in ${priority.days_until_start} days`
+                                                                        : priority.coverage_status === "Expired"
+                                                                            ? `Coverage expired ${Math.abs(priority.days_remaining)} days ago`
+                                                                            : `${priority.days_remaining} days remaining`}
                                                                 </span>
 
                                                             </div>
@@ -1116,6 +1198,52 @@ function AssetDetails() {
                         </div>
 
                     </div>
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setUploadError("");
+                            setShowUploadForm(!showUploadForm);
+                        }}
+                    >
+                        + Upload Document
+                    </button>
+
+                    {showUploadForm && (
+                        <form onSubmit={handleUploadAssetDocument}>
+                            <h3>Upload Asset Document</h3>
+
+                            <p>
+                                Store an invoice, receipt, manual, or other document directly
+                                against this asset.
+                            </p>
+
+                            <input
+                                type="file"
+                                accept=".pdf,.jpg,.jpeg,.png"
+                                onChange={(e) => setUploadFile(e.target.files[0] || null)}
+                            />
+
+                            {uploadError && (
+                                <p style={{ color: "red" }}>{uploadError}</p>
+                            )}
+
+                            <button type="submit" disabled={uploading}>
+                                {uploading ? "Uploading..." : "Save Document"}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowUploadForm(false);
+                                    setUploadFile(null);
+                                    setUploadError("");
+                                }}
+                            >
+                                Cancel
+                            </button>
+                        </form>
+                    )}
 
                     {documents.length === 0 ? (
 
