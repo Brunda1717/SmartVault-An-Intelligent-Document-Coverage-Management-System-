@@ -3776,6 +3776,67 @@ a {
     color: #334155;
 }
 
+/* =========================================================
+   ASSET SEARCH & FILTER
+========================================================= */
+
+.asset-filters {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    align-items: center;
+}
+
+.asset-filters input,
+.asset-filters select {
+    height: 44px;
+    padding: 0 14px;
+    border: 1px solid #e5e9f1;
+    border-radius: 10px;
+    background: white;
+    color: #334155;
+    font: inherit;
+    font-size: 0.78rem;
+    outline: none;
+    transition: border-color 0.25s ease,
+                box-shadow 0.25s ease;
+}
+
+.asset-filters input {
+    flex: 1;
+    min-width: 0;
+}
+
+.asset-filters select {
+    min-width: 180px;
+    cursor: pointer;
+}
+
+.asset-filters input:focus,
+.asset-filters select:focus {
+    border-color: #3155d9;
+    box-shadow: 0 0 0 3px rgba(49, 85, 217, 0.1);
+}
+
+.asset-filters input::placeholder {
+    color: #94a3b8;
+}
+
+/* Responsive layout */
+
+@media (max-width: 600px) {
+    .asset-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .asset-filters input,
+    .asset-filters select {
+        width: 100%;
+        box-sizing: border-box;
+    }
+}
+
 
 /* =========================================================
    EMPTY STATES

@@ -9,6 +9,8 @@ function Dashboard() {
     const [assets, setAssets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [searchTerm, setSearchTerm] = useState("");
+    const [selectedCategory, setSelectedCategory] = useState("");
 
     const handleDeleteAsset = async (e, asset) => {
         e.stopPropagation();   // stops the card's click from opening the asset page
@@ -135,6 +137,23 @@ function Dashboard() {
     const lapsedCount = counts.Lapsed || 0;
 
     const totalAssets = assets.length;
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    const filteredAssets = assets.filter((asset) => {
+    const matchesSearch = [
+        asset.asset_name,
+        asset.brand,
+        asset.model,
+    ].some((value) =>
+        String(value || "").toLowerCase().includes(normalizedSearch)
+    );
+
+    const matchesCategory =
+        selectedCategory === "" ||
+        asset.category === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+    });
 
     const totalTracked =
         criticalCount +
@@ -758,7 +777,31 @@ function Dashboard() {
                     </button>
 
                 </div>
+               {assets.length > 0 && (
+    <div className="asset-filters">
 
+        <input
+            type="text"
+            placeholder="Search by asset name, brand or model..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+        />
+
+        <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+        >
+            <option value="">All Categories</option>
+            <option value="Smartphone">Smartphone</option>
+            <option value="Laptop">Laptop</option>
+            <option value="Television">Television</option>
+            <option value="Appliance">Appliance</option>
+            <option value="Vehicle">Vehicle</option>
+            <option value="Other">Other</option>
+        </select>
+
+    </div>
+)}
 
                 {assets.length === 0 ? (
 
@@ -785,13 +828,40 @@ function Dashboard() {
                             Add your first asset →
                         </button>
 
-                    </div>
+                  </div>
 
-                ) : (
+) : filteredAssets.length === 0 ? (
 
-                    <div className="asset-grid">
+    <div className="empty-assets">
 
-                        {assets.map((asset, index) => (
+        <div className="empty-assets-icon">
+            ◈
+        </div>
+
+        <h3>
+            No assets found
+        </h3>
+
+        <p>
+            Try changing your search or category filter.
+        </p>
+
+        <button
+            onClick={() => {
+                setSearchTerm("");
+                setSelectedCategory("");
+            }}
+        >
+            Clear filters
+        </button>
+
+    </div>
+
+) : (
+
+    <div className="asset-grid">
+
+                        {filteredAssets.map((asset, index) => (
 
                             <div
                                 className="asset-dashboard-card"
